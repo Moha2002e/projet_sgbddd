@@ -9,6 +9,43 @@ Pour être très clair, chaque blob contiendra donc en réalité la même image.
 **/
 SET SERVEROUTPUT ON;
 
+-- Créer ou mettre à jour le répertoire Oracle pour accéder au fichier image
+-- IMPORTANT: Oracle refuse les chemins avec liens symboliques
+-- Solution: utiliser /tmp qui est un répertoire réel sans lien symbolique
+-- 
+-- AVANT d'exécuter ce script, copiez le fichier ticket.jpg dans /tmp :
+--   cp /home/oracle/Documents/ticket.jpg /tmp/ticket.jpg
+--
+DECLARE
+    v_dir_path VARCHAR2(1000);
+BEGIN
+    -- Vérifier où pointe le répertoire s'il existe
+    BEGIN
+        SELECT DIRECTORY_PATH INTO v_dir_path
+        FROM ALL_DIRECTORIES 
+        WHERE DIRECTORY_NAME = 'BLOBS_DIR';
+        
+        DBMS_OUTPUT.PUT_LINE('⚠️  Repertoire BLOBS_DIR existe deja et pointe vers: ' || v_dir_path);
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            v_dir_path := NULL;
+    END;
+    
+    -- Utiliser /tmp qui est un répertoire système réel sans lien symbolique
+    -- Accessible en écriture pour tous les utilisateurs sans sudo
+    EXECUTE IMMEDIATE 'CREATE OR REPLACE DIRECTORY BLOBS_DIR AS ''/tmp''';
+    DBMS_OUTPUT.PUT_LINE('✅ Repertoire BLOBS_DIR cree/mis a jour vers /tmp');
+    DBMS_OUTPUT.PUT_LINE('   Assurez-vous que ticket.jpg est dans /tmp');
+    DBMS_OUTPUT.PUT_LINE('   Commande: cp /home/oracle/Documents/ticket.jpg /tmp/ticket.jpg');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('❌ Erreur lors de la creation du repertoire: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('   Vous devez peut-etre avoir les privileges CREATE ANY DIRECTORY.');
+        RAISE;
+END;
+/
+
 DECLARE
     v_count NUMBER;
 BEGIN
@@ -27,22 +64,41 @@ END;
 
 DECLARE
     v_blob BLOB;
+    v_bfile BFILE;
     v_nb_ventes NUMBER := 0;
 BEGIN
+    -- Créer un BLOB temporaire
     DBMS_LOB.CREATETEMPORARY(v_blob, TRUE);
     
-    DBMS_LOB.WRITEAPPEND(v_blob, 2, HEXTORAW('FFD8')); 
-    DBMS_LOB.WRITEAPPEND(v_blob, 18, HEXTORAW('FFE000104A46494600010100000100010000'));
+    -- Ouvrir le fichier image via BFILENAME
+    -- BLOBS_DIR pointe vers /tmp (répertoire système réel sans lien symbolique)
+    -- Le fichier ticket.jpg doit être copié dans /tmp avant l'exécution
+    v_bfile := BFILENAME('BLOBS_DIR', 'ticket.jpg');
     
-    FOR i IN 1..2500 LOOP
-        DBMS_LOB.WRITEAPPEND(v_blob, 20, HEXTORAW('0000000000000000000000000000000000000000'));
-    END LOOP;
+    -- Vérifier que le fichier existe
+    IF DBMS_LOB.FILEEXISTS(v_bfile) = 1 THEN
+        -- Ouvrir le fichier
+        DBMS_LOB.FILEOPEN(v_bfile, DBMS_LOB.FILE_READONLY);
+        
+        -- Charger le contenu du fichier dans le BLOB
+        DBMS_LOB.LOADFROMFILE(
+            dest_lob => v_blob,
+            src_lob => v_bfile,
+            amount => DBMS_LOB.GETLENGTH(v_bfile)
+        );
+        
+        -- Fermer le fichier
+        DBMS_LOB.FILECLOSE(v_bfile);
+        
+        DBMS_OUTPUT.PUT_LINE('✅ Image ticket chargee (' || DBMS_LOB.GETLENGTH(v_blob) || ' octets).');
+        DBMS_OUTPUT.PUT_LINE('   Format: JPEG');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('❌ Erreur: Le fichier ticket.jpg est introuvable dans /tmp.');
+        DBMS_OUTPUT.PUT_LINE('   Copier le fichier: cp /home/oracle/Documents/ticket.jpg /tmp/ticket.jpg');
+        RAISE_APPLICATION_ERROR(-20001, 'Fichier introuvable');
+    END IF;
     
-    DBMS_LOB.WRITEAPPEND(v_blob, 2, HEXTORAW('FFD9'));
-    
-    DBMS_OUTPUT.PUT_LINE('✅ BLOB de test genere (' || DBMS_LOB.GETLENGTH(v_blob) || ' octets).');
-    DBMS_OUTPUT.PUT_LINE('   Format: JPEG valide');
-    
+    -- Copier le BLOB dans toutes les ventes
     UPDATE VENTES SET TICKET_BLOB = v_blob;
     
     SELECT COUNT(*) INTO v_nb_ventes FROM VENTES WHERE TICKET_BLOB IS NOT NULL;
@@ -55,6 +111,9 @@ BEGIN
     
 EXCEPTION
     WHEN OTHERS THEN
+        IF DBMS_LOB.FILEISOPEN(v_bfile) = 1 THEN
+            DBMS_LOB.FILECLOSE(v_bfile);
+        END IF;
         DBMS_OUTPUT.PUT_LINE('❌ Erreur: ' || SQLERRM);
         ROLLBACK;
 END;
