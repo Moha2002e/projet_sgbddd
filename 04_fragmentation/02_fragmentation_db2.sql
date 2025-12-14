@@ -49,7 +49,8 @@ CREATE TABLE DB2_VENTES (
     IdClient NUMBER REFERENCES DB2_CLIENTS(IdClient),
     IdMagasin NUMBER REFERENCES DB2_MAGASINS(IdMagasin),
     DateAchat DATE,
-    URLTicket VARCHAR2(500)
+    URLTicket VARCHAR2(500),
+    TICKET_BLOB BLOB
 );
 
 CREATE TABLE DB2_LIGNES_VENTES (
@@ -75,8 +76,8 @@ SELECT * FROM MAGASINS
 WHERE CodePostalMagasin >= 5000 AND CodePostalMagasin <= 9999;
 PROMPT ✅ Magasins (CP 5000-9999) inseres dans DB2.
 
-INSERT INTO DB2_VENTES (IdVente, IdClient, IdMagasin, DateAchat, URLTicket)
-SELECT vnt.IdVente, vnt.IdClient, vnt.IdMagasin, vnt.DateAchat, vnt.URLTicket
+INSERT INTO DB2_VENTES (IdVente, IdClient, IdMagasin, DateAchat, URLTicket, TICKET_BLOB)
+SELECT vnt.IdVente, vnt.IdClient, vnt.IdMagasin, vnt.DateAchat, vnt.URLTicket, vnt.TICKET_BLOB
 FROM VENTES vnt
 JOIN MAGASINS mag ON vnt.IdMagasin = mag.IdMagasin
 WHERE mag.CodePostalMagasin >= 5000 AND mag.CodePostalMagasin <= 9999;
