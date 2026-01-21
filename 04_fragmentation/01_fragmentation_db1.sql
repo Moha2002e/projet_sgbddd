@@ -1,8 +1,4 @@
-/**
-3.4 Fragmentation dans une base de données distribuée - PARTIE 1 (DB1)
-La première base de données contiendra uniquement les informations concernant les ventes 
-s’étant effectuées dans un magasin dont le code postal est compris entre 0 et 4999.
-*/
+
 SET SERVEROUTPUT ON;
 
 BEGIN
@@ -10,7 +6,7 @@ BEGIN
               WHERE table_name LIKE 'DB1_%') LOOP
         EXECUTE IMMEDIATE 'DROP TABLE ' || t.table_name || ' CASCADE CONSTRAINTS';
     END LOOP;
-    DBMS_OUTPUT.PUT_LINE('✅ Tables DB1 nettoyees.');
+    DBMS_OUTPUT.PUT_LINE('Tables DB1 nettoyees');
 END;
 /
 
@@ -54,33 +50,26 @@ CREATE TABLE DB1_LIGNES_VENTES (
     FOREIGN KEY (IdArticle, Console) REFERENCES DB1_ARTICLES(IdArticle, Console)
 );
 
-PROMPT ✅ Tables DB1 creees.
+INSERT INTO DB1_CLIENTS SELECT * FROM projetBD1.CLIENTS;
 
-INSERT INTO DB1_CLIENTS SELECT * FROM CLIENTS;
-PROMPT ✅ Clients repliques dans DB1.
-
-INSERT INTO DB1_ARTICLES SELECT * FROM ARTICLES;
-PROMPT ✅ Articles repliques dans DB1.
+INSERT INTO DB1_ARTICLES SELECT * FROM projetBD1.ARTICLES;
 
 INSERT INTO DB1_MAGASINS 
-SELECT * FROM MAGASINS 
+SELECT * FROM projetBD1.MAGASINS 
 WHERE CodePostalMagasin >= 0 AND CodePostalMagasin <= 4999;
-PROMPT ✅ Magasins (CP 0-4999) inseres dans DB1.
 
 INSERT INTO DB1_VENTES (IdVente, IdClient, IdMagasin, DateAchat, URLTicket, TICKET_BLOB)
 SELECT vnt.IdVente, vnt.IdClient, vnt.IdMagasin, vnt.DateAchat, vnt.URLTicket, vnt.TICKET_BLOB
-FROM VENTES vnt
-JOIN MAGASINS mag ON vnt.IdMagasin = mag.IdMagasin
+FROM projetBD1.VENTES vnt
+JOIN projetBD1.MAGASINS mag ON vnt.IdMagasin = mag.IdMagasin
 WHERE mag.CodePostalMagasin >= 0 AND mag.CodePostalMagasin <= 4999;
-PROMPT ✅ Ventes (CP 0-4999) inserees dans DB1.
 
 INSERT INTO DB1_LIGNES_VENTES
 SELECT lgn.*
-FROM LIGNES_VENTES lgn
-JOIN VENTES vnt ON lgn.IdVente = vnt.IdVente
-JOIN MAGASINS mag ON vnt.IdMagasin = mag.IdMagasin
+FROM projetBD1.LIGNES_VENTES lgn
+JOIN projetBD1.VENTES vnt ON lgn.IdVente = vnt.IdVente
+JOIN projetBD1.MAGASINS mag ON vnt.IdMagasin = mag.IdMagasin
 WHERE mag.CodePostalMagasin >= 0 AND mag.CodePostalMagasin <= 4999;
-PROMPT ✅ Details ventes (CP 0-4999) inseres dans DB1.
 
 COMMIT;
 
@@ -93,5 +82,3 @@ UNION ALL
 SELECT 'DB1 - Ventes :', COUNT(*) FROM DB1_VENTES
 UNION ALL
 SELECT 'DB1 - Details ventes :', COUNT(*) FROM DB1_LIGNES_VENTES;
-
-PROMPT ✅ BASE 1 (CP 0-4999) creee et remplie avec succes !
